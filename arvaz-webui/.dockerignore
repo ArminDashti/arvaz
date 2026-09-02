@@ -1,0 +1,11 @@
+.git
+.gitignore
+.armin
+node_modules
+dist
+.dev-dist
+logs
+*.md
+.vscode
+.idea
+*.local
