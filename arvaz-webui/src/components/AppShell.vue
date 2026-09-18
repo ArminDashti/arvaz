@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { Activity, Boxes, Gauge, LayoutDashboard, Shield, User, Users, Wifi } from 'lucide-vue-next'
+import { LayoutDashboard, User, Users } from 'lucide-vue-next'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
+import IconDocker from '@/assets/icons/IconDocker.vue'
+import IconIperf from '@/assets/icons/IconIperf.vue'
+import IconSoftEther from '@/assets/icons/IconSoftEther.vue'
+import IconWindscribe from '@/assets/icons/IconWindscribe.vue'
 import SidebarHosts from '@/components/SidebarHosts.vue'
 import { clearToken } from '@/lib/auth'
 
@@ -14,11 +18,10 @@ function logout() {
 
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/containers', label: 'Docker', icon: Boxes },
-  { to: '/host', label: 'Host', icon: Activity },
-  { to: '/mullvad', label: 'Mullvad', icon: Shield },
-  { to: '/iperf', label: 'Iperf', icon: Gauge },
-  { to: '/softether/users/online', label: 'SE Online', icon: Wifi },
+  { to: '/containers', label: 'Docker', icon: IconDocker },
+  { to: '/windscribe', label: 'Windscribe', icon: IconWindscribe },
+  { to: '/iperf', label: 'Iperf', icon: IconIperf },
+  { to: '/softether/users/online', label: 'SE Online', icon: IconSoftEther },
   { to: '/softether/users', label: 'SE Users', icon: Users },
   { to: '/about-me', label: 'About Me', icon: User },
 ]

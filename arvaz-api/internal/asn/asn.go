@@ -156,8 +156,5 @@ func (r *AsipResolver) fetch(ip string) string {
 	if name != "" {
 		return name
 	}
-	if strings.EqualFold(strings.TrimSpace(body.AS), "error") {
-		return "error"
-	}
 	return ""
 }

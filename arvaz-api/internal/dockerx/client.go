@@ -51,7 +51,7 @@ func (c *Client) ListContainers(ctx context.Context) ([]ContainerInfo, error) {
 		return []ContainerInfo{}, nil
 	}
 
-	args := append([]string{"inspect"}, ids...)
+	args := append([]string{"inspect", "-s"}, ids...)
 	raw, err := runDocker(ctx, args...)
 	if err != nil {
 		return nil, err
@@ -350,6 +350,38 @@ func containerDiskBytes(sizeRootFs, sizeRw int64) uint64 {
 		return uint64(sizeRw)
 	}
 	return 0
+}
+
+func (c *Client) StartContainer(ctx context.Context, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("empty container name")
+	}
+	_, err := runDocker(ctx, "start", name)
+	return err
+}
+
+func (c *Client) StopContainer(ctx context.Context, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("empty container name")
+	}
+	_, err := runDocker(ctx, "stop", name)
+	return err
+}
+
+// ExecShell runs a non-interactive command in the container (sh -c).
+func (c *Client) ExecShell(ctx context.Context, name, command string) (string, error) {
+	name = strings.TrimSpace(name)
+	command = strings.TrimSpace(command)
+	if name == "" {
+		return "", fmt.Errorf("empty container name")
+	}
+	if command == "" {
+		return "", fmt.Errorf("empty command")
+	}
+	out, err := runDocker(ctx, "exec", name, "sh", "-c", command)
+	return out, err
 }
 
 func round2(v float64) float64 {

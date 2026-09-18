@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
 import { ispLogoSrc } from '@/lib/ispLogo'
-import { emptyGridValue } from '@/lib/utils'
+import { emptyGridValue, softetherIpLogsPath } from '@/lib/utils'
 
 const props = defineProps<{
   name?: string
   logoKey?: string
+  ip?: string
 }>()
 
 const lookupFailed = computed(() => (props.name || '').trim().toLowerCase() === 'error')
@@ -16,7 +18,8 @@ const label = computed(() => {
 })
 const tip = computed(() => {
   if (lookupFailed.value) return 'Lookup service returned an error for this IP'
-  return props.name?.trim() || undefined
+  const parts = [props.name?.trim(), props.ip?.trim()].filter(Boolean)
+  return parts.length ? parts.join(' ') : undefined
 })
 </script>
 
@@ -24,6 +27,13 @@ const tip = computed(() => {
   <span class="isp-name" :title="tip">
     <img v-if="src" class="isp-name__logo" :src="src" alt="" />
     <span class="isp-name__text">{{ label }}</span>
+    <template v-if="ip">
+      <span class="isp-name__paren">(</span>
+      <RouterLink class="isp-name__ip font-medium hover:underline" :to="softetherIpLogsPath(ip)">
+        {{ ip }}
+      </RouterLink>
+      <span class="isp-name__paren">)</span>
+    </template>
   </span>
 </template>
 
@@ -48,5 +58,14 @@ const tip = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.isp-name__paren {
+  color: var(--color-muted-foreground);
+  flex-shrink: 0;
+}
+
+.isp-name__ip {
+  flex-shrink: 0;
 }
 </style>

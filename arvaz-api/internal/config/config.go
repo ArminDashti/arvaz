@@ -17,6 +17,7 @@ type Config struct {
 	PublicIP               string
 	HAProxyConfigPath      string
 	MullvadContainer       string
+	WindscribeContainer    string
 	SoftEtherContainer     string
 	SoftEtherPassword      string
 	SoftEtherHub           string
@@ -37,6 +38,7 @@ func Load() Config {
 		PublicIP:               getenv("PUBLIC_IP", "2.144.27.74"),
 		HAProxyConfigPath:      getenv("HAPROXY_CONFIG_PATH", "/cloud-admin/docker-volumes/reverse-proxy/haproxy/config/haproxy.cfg"),
 		MullvadContainer:       getenv("MULLVAD_CONTAINER", "mullvad-1"),
+		WindscribeContainer:    getenv("WINDSCRIBE_CONTAINER", "windscribe"),
 		SoftEtherContainer:     getenv("SOFTETHER_CONTAINER", "softether"),
 		SoftEtherPassword:      getenv("SOFTETHER_PASSWORD", "dopadopa123"),
 		SoftEtherHub:           getenv("SOFTETHER_HUB", "DEFAULT"),

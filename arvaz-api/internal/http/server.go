@@ -14,6 +14,7 @@ import (
 	"github.com/ArminDashti/arvaz-api/internal/haproxy"
 	"github.com/ArminDashti/arvaz-api/internal/mullvad"
 	"github.com/ArminDashti/arvaz-api/internal/softether"
+	"github.com/ArminDashti/arvaz-api/internal/windscribe"
 	"github.com/ArminDashti/arvaz-api/internal/store"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -22,15 +23,16 @@ import (
 type Server struct {
 	cfg       config.Config
 	docker    *dockerx.Client
-	mullvad   *mullvad.Client
-	softether *softether.Client
+	mullvad    *mullvad.Client
+	windscribe *windscribe.Client
+	softether  *softether.Client
 	haproxy   *haproxy.Client
 	auth      *auth.Service
 	store     *store.Store
 }
 
-func New(cfg config.Config, d *dockerx.Client, mv *mullvad.Client, se *softether.Client, hap *haproxy.Client, authSvc *auth.Service, st *store.Store) *Server {
-	return &Server{cfg: cfg, docker: d, mullvad: mv, softether: se, haproxy: hap, auth: authSvc, store: st}
+func New(cfg config.Config, d *dockerx.Client, mv *mullvad.Client, ws *windscribe.Client, se *softether.Client, hap *haproxy.Client, authSvc *auth.Service, st *store.Store) *Server {
+	return &Server{cfg: cfg, docker: d, mullvad: mv, windscribe: ws, softether: se, haproxy: hap, auth: authSvc, store: st}
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -61,6 +63,9 @@ func (s *Server) Router() *gin.Engine {
 	protected.Use(jwtMiddleware(s.auth))
 	{
 		protected.GET("/docker/containers", s.getDockerContainers)
+		protected.POST("/docker/containers/:name/start", s.postDockerStart)
+		protected.POST("/docker/containers/:name/stop", s.postDockerStop)
+		protected.POST("/docker/containers/:name/exec", s.postDockerExec)
 		protected.GET("/mullvad/status", s.getMullvadStatus)
 		protected.GET("/mullvad/relays", s.getMullvadRelays)
 		protected.POST("/mullvad/relay", s.postMullvadRelay)
@@ -69,7 +74,14 @@ func (s *Server) Router() *gin.Engine {
 		protected.POST("/mullvad/tunnel", s.postMullvadTunnel)
 		protected.POST("/mullvad/ping", s.postMullvadPing)
 		protected.POST("/mullvad/speedtest", s.postMullvadSpeedtest)
+		protected.GET("/windscribe/status", s.getWindscribeStatus)
+		protected.GET("/windscribe/locations", s.getWindscribeLocations)
+		protected.POST("/windscribe/connect", s.postWindscribeConnect)
+		protected.POST("/windscribe/disconnect", s.postWindscribeDisconnect)
+		protected.POST("/windscribe/ping", s.postWindscribePing)
+		protected.POST("/windscribe/speedtest", s.postWindscribeSpeedtest)
 		protected.GET("/system/host-metrics", s.getHostMetrics)
+		protected.GET("/system/host-metrics/history", s.getHostMetricsHistory)
 		protected.GET("/iperf/latency", s.getIperfLatency)
 		protected.GET("/iperf/download", s.getIperfDownload)
 		protected.POST("/iperf/upload", s.postIperfUpload)
@@ -115,6 +127,52 @@ func (s *Server) getDockerContainers(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"containers": containers})
+}
+
+func (s *Server) postDockerStart(c *gin.Context) {
+	if s.docker == nil {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": "docker unavailable"})
+		return
+	}
+	name := c.Param("name")
+	if err := s.docker.StartContainer(c.Request.Context(), name); err != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (s *Server) postDockerStop(c *gin.Context) {
+	if s.docker == nil {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": "docker unavailable"})
+		return
+	}
+	name := c.Param("name")
+	if err := s.docker.StopContainer(c.Request.Context(), name); err != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (s *Server) postDockerExec(c *gin.Context) {
+	if s.docker == nil {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": "docker unavailable"})
+		return
+	}
+	var req struct {
+		Command string `json:"command"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Command) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "command required"})
+		return
+	}
+	out, err := s.docker.ExecShell(c.Request.Context(), c.Param("name"), req.Command)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "output": out, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "output": out})
 }
 
 func (s *Server) getMullvadStatus(c *gin.Context) {
@@ -227,6 +285,78 @@ func (s *Server) postMullvadSpeedtest(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"result": res})
 }
 
+func (s *Server) getWindscribeStatus(c *gin.Context) {
+	st, err := s.windscribe.Status(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": st})
+}
+
+func (s *Server) getWindscribeLocations(c *gin.Context) {
+	locs, err := s.windscribe.ListLocations(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"locations": []any{}, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"locations": locs})
+}
+
+func (s *Server) postWindscribeConnect(c *gin.Context) {
+	var req struct {
+		Location string `json:"location" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	if err := s.windscribe.Connect(c.Request.Context(), req.Location); err != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (s *Server) postWindscribeDisconnect(c *gin.Context) {
+	if err := s.windscribe.Disconnect(c.Request.Context()); err != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (s *Server) postWindscribePing(c *gin.Context) {
+	var req struct {
+		Target string `json:"target"`
+		Count  int    `json:"count"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	res, err := s.windscribe.Ping(c.Request.Context(), req.Target, req.Count)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"result": res})
+}
+
+func (s *Server) postWindscribeSpeedtest(c *gin.Context) {
+	var req struct {
+		Mode string `json:"mode"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	mode := strings.TrimSpace(req.Mode)
+	if mode == "" {
+		mode = "parallel"
+	}
+	res, err := s.windscribe.Speedtest(c.Request.Context(), mode)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"result": res})
+}
+
 func (s *Server) getSoftEtherSessions(c *gin.Context) {
 	ctx := c.Request.Context()
 	// Serve from DB cache (background poll). Live vpncmd on every page load
@@ -238,15 +368,20 @@ func (s *Server) getSoftEtherSessions(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"sessions": []any{}, "error": err.Error()})
 			return
 		}
-		if len(sessions) == 0 {
-			sessions, liveErr = s.tryLiveSoftEtherSessions(ctx)
+		if len(sessions) == 0 || softEtherAllZeroTraffic(sessions) {
+			live, err := s.tryLiveSoftEtherSessions(ctx)
+			if err != nil {
+				liveErr = err
+			}
+			if len(live) > 0 {
+				sessions = live
+			}
 		}
 		if len(sessions) == 0 {
 			sessions = s.softEtherSessionsFromHAProxy(ctx)
 		}
-		for i := range sessions {
-			sessions[i].LastISP, sessions[i].IspLogo = asn.WithLogo(sessions[i].LastISP)
-		}
+		s.enrichSoftEtherPublicIPs(ctx, sessions)
+		s.enrichSoftEtherSessions(ctx, sessions)
 		resp := gin.H{"sessions": sessions}
 		if liveErr != nil && len(sessions) == 0 {
 			resp["error"] = liveErr.Error()
@@ -263,28 +398,99 @@ func (s *Server) getSoftEtherSessions(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"sessions": []any{}, "error": err.Error()})
 		return
 	}
-	for i := range sessions {
-		sessions[i].LastISP, sessions[i].IspLogo = asn.WithLogo(sessions[i].LastISP)
-	}
+	s.enrichSoftEtherSessions(ctx, sessions)
 	c.JSON(http.StatusOK, gin.H{"sessions": sessions})
+}
+
+func softEtherAllZeroTraffic(sessions []softether.OnlineSession) bool {
+	if len(sessions) == 0 {
+		return true
+	}
+	for _, s := range sessions {
+		if s.DownloadBytes > 0 || s.UploadBytes > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Server) enrichSoftEtherSessions(ctx context.Context, sessions []softether.OnlineSession) {
+	for i := range sessions {
+		row := &sessions[i]
+		if (row.Username == "" || row.Username == row.ClientIP) && row.ClientIP != "" && s.store != nil {
+			if hist, err := s.store.LookupLatestByClientIP(ctx, row.ClientIP); err == nil && hist != nil {
+				if hist.Username != "" && hist.Username != row.ClientIP {
+					row.Username = hist.Username
+				}
+			}
+		}
+		if row.Username == row.ClientIP {
+			row.Username = ""
+		}
+		row.LastISP, row.IspLogo = asn.WithLogo(row.LastISP)
+	}
+	if s.softether != nil {
+		s.softether.AttachRates(sessions)
+	}
 }
 
 func (s *Server) tryLiveSoftEtherSessions(ctx context.Context) ([]softether.OnlineSession, error) {
 	if s.softether == nil || !s.softether.Enabled {
 		return nil, nil
 	}
-	liveCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	// SessionList only — never SessionGet here. Per-session vpncmd under the
+	// global lock stacked 1s UI polls into multi-hour hangs on T3.
+	liveCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	sessions, err := s.softether.ListOnlineSessions(liveCtx)
+	sessions, err := s.softether.ListSessionTraffic(liveCtx)
 	if err != nil {
 		return nil, err
 	}
+	s.enrichSoftEtherPublicIPs(liveCtx, sessions)
 	if len(sessions) > 0 && s.store != nil {
 		if syncErr := s.store.SyncOnlineSessions(liveCtx, sessions); syncErr != nil {
 			log.Printf("softether live sync: %v", syncErr)
 		}
 	}
 	return sessions, nil
+}
+
+// enrichSoftEtherPublicIPs fills missing public client IPs from softether_user_stats
+// (last known IP per username). Avoids HAProxy show-sess fan-out on the 1s UI poll path.
+func (s *Server) enrichSoftEtherPublicIPs(ctx context.Context, sessions []softether.OnlineSession) {
+	if s.store == nil || len(sessions) == 0 {
+		return
+	}
+	stats, err := s.store.GetUserStatMap(ctx)
+	if err != nil || len(stats) == 0 {
+		return
+	}
+	for i := range sessions {
+		row := &sessions[i]
+		if row.ClientIP != "" || row.Username == "" {
+			continue
+		}
+		st, ok := stats[row.Username]
+		if !ok || st.ClientIP == "" {
+			continue
+		}
+		row.ClientIP = st.ClientIP
+		if row.LastISP == "" && st.ISP != "" {
+			row.LastISP = st.ISP
+		}
+	}
+	if s.softether == nil {
+		return
+	}
+	for i := range sessions {
+		row := &sessions[i]
+		if row.ClientIP == "" || row.LastISP != "" {
+			continue
+		}
+		if label := s.softether.ASN.Lookup(row.ClientIP); label != "" {
+			row.LastISP = label
+		}
+	}
 }
 
 func (s *Server) softEtherSessionsFromHAProxy(ctx context.Context) []softether.OnlineSession {
@@ -298,14 +504,19 @@ func (s *Server) softEtherSessionsFromHAProxy(ctx context.Context) []softether.O
 
 	// Best-effort live username/traffic map keyed by public client IP.
 	liveByIP := map[string]softether.OnlineSession{}
+	liveByUser := map[string]softether.OnlineSession{}
 	if s.softether != nil && s.softether.Enabled {
-		liveCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		live, liveErr := s.softether.ListOnlineSessions(liveCtx)
+		liveCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		live, liveErr := s.softether.ListSessionTraffic(liveCtx)
 		cancel()
 		if liveErr == nil {
+			s.enrichSoftEtherPublicIPs(ctx, live)
 			for _, row := range live {
 				if row.ClientIP != "" {
 					liveByIP[row.ClientIP] = row
+				}
+				if row.Username != "" {
+					liveByUser[strings.ToLower(row.Username)] = row
 				}
 			}
 		}
@@ -334,6 +545,19 @@ func (s *Server) softEtherSessionsFromHAProxy(ctx context.Context) []softether.O
 			row.UploadBytes = hist.UploadBytes
 			if hist.ISP != "" {
 				row.LastISP = hist.ISP
+			}
+			if live, ok := liveByUser[strings.ToLower(hist.Username)]; ok {
+				row.DownloadBytes = live.DownloadBytes
+				row.UploadBytes = live.UploadBytes
+				row.TransferBytes = live.TransferBytes
+				row.SessionName = live.SessionName
+				row.SessionKey = live.SessionKey
+				if live.DownloadMbps != nil {
+					row.DownloadMbps = live.DownloadMbps
+				}
+				if live.UploadMbps != nil {
+					row.UploadMbps = live.UploadMbps
+				}
 			}
 		}
 		if row.Username == "" || row.Username == e.IP {

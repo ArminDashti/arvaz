@@ -26,6 +26,13 @@ export function formatBps(n: number | undefined | null): string {
   return `${formatBytes(n)}/s`
 }
 
+export function formatMbps(n: number | undefined | null): string {
+  if (n == null || Number.isNaN(n)) return '—'
+  if (n >= 10) return `${n.toFixed(1)} Mbps`
+  if (n >= 1) return `${n.toFixed(2)} Mbps`
+  return `${n.toFixed(3)} Mbps`
+}
+
 export function formatDuration(seconds: number | undefined | null): string {
   if (seconds == null || Number.isNaN(seconds)) return '—'
   const s = Math.max(0, Math.floor(seconds))
@@ -80,6 +87,17 @@ export function formatClockHHMM(value: string | Date | null | undefined): string
   const d = typeof value === 'string' || value == null ? parseFlexibleDate(value) : value
   if (!d) return '—'
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+}
+
+/** Connected at: `21:22 (1h 35m)`. */
+export function formatConnectedAt(
+  connectedAt: string | Date | null | undefined,
+  durationSeconds?: number | null,
+): string {
+  const clock = formatClockHHMM(connectedAt)
+  if (clock === '—') return '—'
+  const seconds = resolveDurationSeconds({ durationSeconds, connectedAt })
+  return `${clock} (${formatDuration(seconds)})`
 }
 
 /**

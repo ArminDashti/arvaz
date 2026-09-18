@@ -88,6 +88,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		"migrations/002_users.sql",
 		"migrations/003_swap_traffic_polarity.sql",
 		"migrations/004_softether_ip_index.sql",
+		"migrations/005_host_metrics_history.sql",
 	} {
 		sqlBytes, err := migrationFS.ReadFile(name)
 		if err != nil {
@@ -432,4 +433,51 @@ func nullIfEmpty(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+type HostMetricsSample struct {
+	TS           time.Time `json:"ts"`
+	CPUPct       float64   `json:"cpuPct"`
+	MemUsedGB    float64   `json:"memUsedGb"`
+	MemTotalGB   float64   `json:"memTotalGb"`
+	DiskUsedGB   float64   `json:"diskUsedGb"`
+	DiskTotalGB  float64   `json:"diskTotalGb"`
+	NetDownMbps  float64   `json:"netDownMbps"`
+	NetUpMbps    float64   `json:"netUpMbps"`
+}
+
+func (s *Store) InsertHostMetricsSample(ctx context.Context, sample HostMetricsSample) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO host_metrics_samples (
+			ts, cpu_pct, mem_used_gb, mem_total_gb, disk_used_gb, disk_total_gb, net_down_mbps, net_up_mbps
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+	`, sample.TS, sample.CPUPct, sample.MemUsedGB, sample.MemTotalGB, sample.DiskUsedGB, sample.DiskTotalGB, sample.NetDownMbps, sample.NetUpMbps)
+	return err
+}
+
+func (s *Store) PruneHostMetricsOlderThan(ctx context.Context, olderThan time.Time) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM host_metrics_samples WHERE ts < $1`, olderThan)
+	return err
+}
+
+func (s *Store) ListHostMetricsHistory(ctx context.Context, from, to time.Time) ([]HostMetricsSample, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT ts, cpu_pct, mem_used_gb, mem_total_gb, disk_used_gb, disk_total_gb, net_down_mbps, net_up_mbps
+		FROM host_metrics_samples
+		WHERE ts >= $1 AND ts < $2
+		ORDER BY ts ASC
+	`, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []HostMetricsSample{}
+	for rows.Next() {
+		var row HostMetricsSample
+		if err := rows.Scan(&row.TS, &row.CPUPct, &row.MemUsedGB, &row.MemTotalGB, &row.DiskUsedGB, &row.DiskTotalGB, &row.NetDownMbps, &row.NetUpMbps); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
 }

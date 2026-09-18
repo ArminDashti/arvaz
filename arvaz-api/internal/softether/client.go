@@ -26,6 +26,8 @@ type OnlineSession struct {
 	DownloadBytes          uint64     `json:"downloadBytes"`
 	UploadBytes            uint64     `json:"uploadBytes"`
 	TransferBytes          uint64     `json:"transferBytes,omitempty"`
+	DownloadMbps           *float64   `json:"downloadMbps,omitempty"`
+	UploadMbps             *float64   `json:"uploadMbps,omitempty"`
 	SessionDurationSeconds int64      `json:"sessionDurationSeconds,omitempty"`
 	ConnectedAt            *time.Time `json:"connectedAt,omitempty"`
 	SessionKey             string     `json:"sessionKey,omitempty"`
@@ -61,6 +63,84 @@ type Client struct {
 	ASN           asn.Resolver
 	HAProxy       *haproxy.Client
 	mu            sync.Mutex
+	rates         rateTracker
+}
+
+type rateSample struct {
+	dl           uint64
+	ul           uint64
+	at           time.Time
+	downloadMbps *float64
+	uploadMbps   *float64
+}
+
+type rateTracker struct {
+	mu   sync.Mutex
+	prev map[string]rateSample
+}
+
+func sessionRateKey(s OnlineSession) string {
+	if s.SessionName != "" {
+		return s.SessionName
+	}
+	if s.SessionKey != "" {
+		return s.SessionKey
+	}
+	return s.Username + "|" + s.ClientIP
+}
+
+func (r *rateTracker) apply(sessions []OnlineSession) {
+	now := time.Now()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	next := make(map[string]rateSample, len(sessions))
+	for i := range sessions {
+		key := sessionRateKey(sessions[i])
+		cur := rateSample{dl: sessions[i].DownloadBytes, ul: sessions[i].UploadBytes, at: now}
+		if prev, ok := r.prev[key]; ok {
+			dt := now.Sub(prev.at).Seconds()
+			if dt > 0 {
+				if cur.dl >= prev.dl {
+					v := float64(cur.dl-prev.dl) * 8 / dt / 1_000_000
+					cur.downloadMbps = &v
+					sessions[i].DownloadMbps = &v
+				}
+				if cur.ul >= prev.ul {
+					v := float64(cur.ul-prev.ul) * 8 / dt / 1_000_000
+					cur.uploadMbps = &v
+					sessions[i].UploadMbps = &v
+				}
+			}
+		}
+		next[key] = cur
+	}
+	r.prev = next
+}
+
+func (r *rateTracker) attach(sessions []OnlineSession) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range sessions {
+		key := sessionRateKey(sessions[i])
+		prev, ok := r.prev[key]
+		if !ok {
+			continue
+		}
+		if prev.downloadMbps != nil {
+			v := *prev.downloadMbps
+			sessions[i].DownloadMbps = &v
+		}
+		if prev.uploadMbps != nil {
+			v := *prev.uploadMbps
+			sessions[i].UploadMbps = &v
+		}
+		// Prefer fresher byte counters from the last traffic poll.
+		if prev.dl > sessions[i].DownloadBytes || prev.ul > sessions[i].UploadBytes {
+			sessions[i].DownloadBytes = prev.dl
+			sessions[i].UploadBytes = prev.ul
+			sessions[i].TransferBytes = prev.dl + prev.ul
+		}
+	}
 }
 
 func New(container, password, hub string, enabled bool, vpncmdTimeout time.Duration, resolver asn.Resolver, hap *haproxy.Client) *Client {
@@ -105,9 +185,9 @@ func (c *Client) ListOnlineSessions(ctx context.Context) ([]OnlineSession, error
 			continue
 		}
 		// SessionList already carries traffic for many hubs; skip SessionGet when
-		// we already have public IP + byte counters (cuts vpncmd fan-out on T3).
+		// we already have public IP + byte counters + ConnectedAt (cuts vpncmd fan-out on T3).
 		needsDetail := s.ClientIP == "" || !isPublicIP(s.ClientIP) ||
-			(s.DownloadBytes == 0 && s.UploadBytes == 0)
+			(s.DownloadBytes == 0 && s.UploadBytes == 0) || s.ConnectedAt == nil
 		clientPort := 0
 		if needsDetail {
 			detail, err := c.sessionGet(ctx, s.SessionName)
@@ -148,8 +228,51 @@ func (c *Client) ListOnlineSessions(ctx context.Context) ([]OnlineSession, error
 			}
 		}
 		s.SessionKey = s.Username + "|" + s.SessionName
+		sanitizeSessionIdentity(s)
 	}
+	c.rates.apply(sessions)
 	return sessions, nil
+}
+
+// ListSessionTraffic runs SessionList only (no SessionGet) and updates live Mbps rates.
+func (c *Client) ListSessionTraffic(ctx context.Context) ([]OnlineSession, error) {
+	if !c.Enabled {
+		return []OnlineSession{}, nil
+	}
+	out, err := c.vpncmd(ctx, "/HUB:"+c.Hub, "/CMD", "SessionList")
+	if err != nil {
+		return nil, err
+	}
+	sessions := parseSessionList(out, time.Now().UTC())
+	for i := range sessions {
+		s := &sessions[i]
+		sanitizeSessionIdentity(s)
+		s.SessionKey = s.Username + "|" + s.SessionName
+		if s.SessionName != "" && s.Username == "" {
+			s.SessionKey = "|" + s.SessionName
+		}
+	}
+	c.rates.apply(sessions)
+	return sessions, nil
+}
+
+// AttachRates copies the latest computed Mbps onto sessions matched by SessionKey.
+func (c *Client) AttachRates(sessions []OnlineSession) {
+	c.rates.attach(sessions)
+}
+
+func sanitizeSessionIdentity(s *OnlineSession) {
+	user := strings.TrimSpace(s.Username)
+	ip := strings.TrimSpace(s.ClientIP)
+	if user == "" || looksLikeIPv4(user) || (ip != "" && user == ip) {
+		s.Username = ""
+	} else {
+		s.Username = user
+	}
+}
+
+func looksLikeIPv4(s string) bool {
+	return net.ParseIP(s) != nil && net.ParseIP(s).To4() != nil
 }
 
 func (c *Client) ListUsers(ctx context.Context) ([]HubUser, error) {
@@ -404,6 +527,10 @@ func parseSessionList(raw string, now time.Time) []OnlineSession {
 			continue
 		}
 		ip := pickPublicIP(block)
+		// Never treat a bare IP as SoftEther username (common for some auth modes).
+		if looksLikeIPv4(user) || (ip != "" && user == ip) {
+			user = ""
+		}
 		dl, ul := parseTraffic(block)
 		out = append(out, OnlineSession{
 			Username:      user,

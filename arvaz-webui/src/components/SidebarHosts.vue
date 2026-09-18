@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Server } from 'lucide-vue-next'
+import { RouterLink } from 'vue-router'
+import IconServer from '@/assets/icons/IconServer.vue'
 import { api, type HostMetrics } from '@/api/client'
 import { avgCpu, barWidth, formatMbps, formatPct, usagePct } from '@/lib/hostMetricsFormat'
 import { MANAGED_HOSTS } from '@/lib/hosts'
@@ -74,10 +75,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="site-sidebar-hosts" aria-label="Managed hosts">
+  <section class="site-sidebar-hosts" aria-label="Managed servers">
     <div class="site-sidebar-hosts-head">
-      <Server class="site-sidebar-hosts-icon" :size="14" aria-hidden="true" />
-      <span>Hosts</span>
+      <IconServer class="site-sidebar-hosts-icon" :size="14" aria-hidden="true" />
+      <span>Servers</span>
       <span v-if="loading && hasAnyMetrics" class="site-sidebar-hosts-live">live</span>
     </div>
     <ul class="site-sidebar-hosts-list">
@@ -90,6 +91,7 @@ onUnmounted(() => {
           '--host-accent-soft': host.accentSoft,
         }"
       >
+        <RouterLink to="/server" class="site-sidebar-host-link">
         <div class="site-sidebar-host-header">
           <span
             class="site-sidebar-host-dot"
@@ -147,6 +149,7 @@ onUnmounted(() => {
             </dd>
           </div>
         </dl>
+        </RouterLink>
       </li>
     </ul>
   </section>

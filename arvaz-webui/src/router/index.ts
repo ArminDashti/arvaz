@@ -12,6 +12,7 @@ import SoftEtherUserLogsView from '@/views/SoftEtherUserLogsView.vue'
 import SoftEtherIpLogsView from '@/views/SoftEtherIpLogsView.vue'
 import AboutMeView from '@/views/AboutMeView.vue'
 import HostMonitorView from '@/views/HostMonitorView.vue'
+import WindscribeView from '@/views/WindscribeView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -23,8 +24,10 @@ const router = createRouter({
       children: [
         { path: '', name: 'dashboard', component: DashboardView },
         { path: 'containers', name: 'containers', component: ContainersView },
-        { path: 'host', name: 'host', component: HostMonitorView },
+        { path: 'server', name: 'server', component: HostMonitorView },
+        { path: 'host', redirect: '/server' },
         { path: 'mullvad', name: 'mullvad', component: MullvadView },
+        { path: 'windscribe', name: 'windscribe', component: WindscribeView },
         { path: 'iperf', name: 'iperf', component: IperfView },
         { path: 'softether/users/online', name: 'softether-online', component: SoftEtherOnlineView },
         { path: 'softether/users/:username/logs', name: 'softether-user-logs', component: SoftEtherUserLogsView },

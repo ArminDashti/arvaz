@@ -65,6 +65,21 @@ export const api = {
     }),
   dockerContainers: () =>
     requestJson<{ containers: DockerContainer[]; error?: string }>('/api/v1/docker/containers'),
+  dockerStart: (name: string) =>
+    requestJson<{ ok: boolean; error?: string }>(
+      `/api/v1/docker/containers/${encodeURIComponent(name)}/start`,
+      { method: 'POST' },
+    ),
+  dockerStop: (name: string) =>
+    requestJson<{ ok: boolean; error?: string }>(
+      `/api/v1/docker/containers/${encodeURIComponent(name)}/stop`,
+      { method: 'POST' },
+    ),
+  dockerExec: (name: string, command: string) =>
+    requestJson<{ ok: boolean; output?: string; error?: string }>(
+      `/api/v1/docker/containers/${encodeURIComponent(name)}/exec`,
+      { method: 'POST', body: JSON.stringify({ command }) },
+    ),
   mullvadStatus: () =>
     requestJson<{ status: MullvadStatus; error?: string }>('/api/v1/mullvad/status'),
   mullvadRelays: () =>
@@ -92,6 +107,30 @@ export const api = {
     }),
   mullvadSpeedtest: (mode: 'single' | 'parallel') =>
     requestJson<{ result: MullvadSpeedtestResult; error?: string }>('/api/v1/mullvad/speedtest', {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    }),
+  windscribeStatus: () =>
+    requestJson<{ status: WindscribeStatus; error?: string }>('/api/v1/windscribe/status'),
+  windscribeLocations: () =>
+    requestJson<{ locations: WindscribeLocation[]; error?: string }>('/api/v1/windscribe/locations'),
+  windscribeConnect: (location: string) =>
+    requestJson<{ ok: boolean; error?: string }>('/api/v1/windscribe/connect', {
+      method: 'POST',
+      body: JSON.stringify({ location }),
+    }),
+  windscribeDisconnect: () =>
+    requestJson<{ ok: boolean; error?: string }>('/api/v1/windscribe/disconnect', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  windscribePing: (target?: string, count?: number) =>
+    requestJson<{ result: WindscribePingResult; error?: string }>('/api/v1/windscribe/ping', {
+      method: 'POST',
+      body: JSON.stringify({ target, count }),
+    }),
+  windscribeSpeedtest: (mode: 'single' | 'parallel') =>
+    requestJson<{ result: WindscribeSpeedtestResult; error?: string }>('/api/v1/windscribe/speedtest', {
       method: 'POST',
       body: JSON.stringify({ mode }),
     }),
@@ -124,6 +163,10 @@ export const api = {
     return data.bytesReceived
   },
   hostMetrics: () => requestJson<HostMetrics>('/api/v1/system/host-metrics'),
+  hostMetricsHistory: (range: HostMetricsHistoryRange) =>
+    requestJson<HostMetricsHistoryResponse>(
+      `/api/v1/system/host-metrics/history?range=${encodeURIComponent(range)}`,
+    ),
 }
 
 export type DockerContainer = {
@@ -182,6 +225,41 @@ export type MullvadSpeedtestResult = {
   parsedOk?: boolean
 }
 
+export type WindscribeStatus = {
+  raw: string
+  connected: boolean
+  location?: string
+  publicIp?: string
+  country?: string
+  city?: string
+  protocol?: string
+}
+
+export type WindscribeLocation = {
+  region: string
+  city: string
+  nickname: string
+  label: string
+  countryCode?: string
+  active: boolean
+}
+
+export type WindscribePingResult = {
+  target: string
+  count: number
+  packetLossPercent: number
+  avgMs: number
+}
+
+export type WindscribeSpeedtestResult = {
+  mode: string
+  raw: string
+  downloadMbps?: number
+  uploadMbps?: number
+  latencyMs?: number
+  parsedOk?: boolean
+}
+
 export type SoftEtherSession = {
   username: string
   clientIp: string
@@ -191,6 +269,8 @@ export type SoftEtherSession = {
   downloadBytes: number
   uploadBytes: number
   transferBytes?: number
+  downloadMbps?: number | null
+  uploadMbps?: number | null
   sessionDurationSeconds?: number
   connectedAt?: string
   sessionKey?: string
@@ -242,5 +322,30 @@ export type HostMetrics = {
     downloadMbps: number
     uploadMbps: number
   }
+  error?: string
+}
+
+export type HostMetricsHistoryRange =
+  | 'today'
+  | 'yesterday'
+  | 'this_week'
+  | 'last_week'
+  | 'this_month'
+  | 'all'
+
+export type HostMetricsHistoryPoint = {
+  ts: string
+  cpuPct: number
+  memUsedGb: number
+  memTotalGb: number
+  diskUsedGb: number
+  diskTotalGb: number
+  netDownMbps: number
+  netUpMbps: number
+}
+
+export type HostMetricsHistoryResponse = {
+  range?: string
+  points?: HostMetricsHistoryPoint[]
   error?: string
 }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ArrowDownToLine, ArrowUpFromLine, Clock, Globe, Network, User } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api, type SoftEtherUser } from '@/api/client'
@@ -112,32 +113,38 @@ onMounted(load)
           <TableHeader>
             <TableRow>
               <TableHead>
-                <button type="button" class="font-medium hover:underline" @click="toggleSort('username')">
+                <button type="button" class="inline-flex items-center gap-1.5 font-medium hover:underline" @click="toggleSort('username')">
+                  <User :size="14" aria-hidden="true" />
                   {{ sortLabel('username', 'Username') }}
                 </button>
               </TableHead>
               <TableHead>
-                <button type="button" class="font-medium hover:underline" @click="toggleSort('downloadBytes')">
+                <button type="button" class="inline-flex items-center gap-1.5 font-medium hover:underline" @click="toggleSort('downloadBytes')">
+                  <ArrowDownToLine :size="14" aria-hidden="true" />
                   {{ sortLabel('downloadBytes', 'Total Download') }}
                 </button>
               </TableHead>
               <TableHead>
-                <button type="button" class="font-medium hover:underline" @click="toggleSort('uploadBytes')">
+                <button type="button" class="inline-flex items-center gap-1.5 font-medium hover:underline" @click="toggleSort('uploadBytes')">
+                  <ArrowUpFromLine :size="14" aria-hidden="true" />
                   {{ sortLabel('uploadBytes', 'Total Upload') }}
                 </button>
               </TableHead>
               <TableHead>
-                <button type="button" class="font-medium hover:underline" @click="toggleSort('lastIp')">
+                <button type="button" class="inline-flex items-center gap-1.5 font-medium hover:underline" @click="toggleSort('lastIp')">
+                  <Network :size="14" aria-hidden="true" />
                   {{ sortLabel('lastIp', 'Last IP') }}
                 </button>
               </TableHead>
               <TableHead class="min-w-64">
-                <button type="button" class="font-medium hover:underline" @click="toggleSort('lastIsp')">
+                <button type="button" class="inline-flex items-center gap-1.5 font-medium hover:underline" @click="toggleSort('lastIsp')">
+                  <Globe :size="14" aria-hidden="true" />
                   {{ sortLabel('lastIsp', 'ISP') }}
                 </button>
               </TableHead>
               <TableHead>
-                <button type="button" class="font-medium hover:underline" @click="toggleSort('lastLogin')">
+                <button type="button" class="inline-flex items-center gap-1.5 font-medium hover:underline" @click="toggleSort('lastLogin')">
+                  <Clock :size="14" aria-hidden="true" />
                   {{ sortLabel('lastLogin', 'Last login') }}
                 </button>
               </TableHead>

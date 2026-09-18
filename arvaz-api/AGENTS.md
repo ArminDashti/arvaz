@@ -4,8 +4,8 @@
 - Show "Dashti Technologies LLC" in the app chrome (sidebar / below logout).
 - SoftEther Online auto-refresh is in minutes with choices 2 / 4 / 8 / 16 and default 4.
 - Host realtime monitoring refresh choices are 1 / 2 / 4 seconds; keep polling light so it does not burn host resources.
-- Prefer nav labels Mullvad (not VPN) and Docker (not Containers).
-- Mullvad Quantum Resistance and DAITA are Mullvad tunnel features, not ISP logos.
+- Prefer nav labels Windscribe (visible VPN; Mullvad kept but hidden from sidebar) and Docker (not Containers).
+- Mullvad Quantum Resistance and DAITA are Mullvad tunnel features, not ISP logos; Windscribe page omits those.
 - When using publish-on-t3 in this multi-root workspace, publish the project(s) that actually changed (often both).
 - Ask before installing packages or other dependencies.
 
