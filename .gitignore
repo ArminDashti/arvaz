@@ -7,3 +7,11 @@
 
 # auto-managed large-file section (>5MB)
 # (paths appended by commit-push-to-github)
+
+# Auto-managed: files larger than 5 MB
+.gitnexus/lbug
+arvaz-api/.armin/docker-data/postgres/pg_wal/000000010000000000000001
+arvaz-webui/node_modules/@esbuild/win32-x64/esbuild.exe
+arvaz-webui/node_modules/lightningcss-win32-x64-msvc/lightningcss.win32-x64-msvc.node
+arvaz-webui/node_modules/typescript/lib/_tsc.js
+arvaz-webui/node_modules/typescript/lib/typescript.js
